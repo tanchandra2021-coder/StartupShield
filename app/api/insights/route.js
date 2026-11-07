@@ -171,7 +171,13 @@ export async function POST(request) {
     );
   }
 
-  const cases = matchCases(result.warnings);
+  const cases = matchCases(result.warnings, profile)
+  .filter(c =>
+    c.matched.length > 0 &&
+    !c.analogOnly &&
+    !c.identityNeedsReview
+  )
+  .slice(0, 4);
 
   try {
     const response = await fetch(

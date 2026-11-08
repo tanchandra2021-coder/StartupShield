@@ -1,4 +1,5 @@
-const GEMINI_API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE";
+const GEMINI_API_KEY =
+  process.env.GEMINI_API_KEY?.trim();
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

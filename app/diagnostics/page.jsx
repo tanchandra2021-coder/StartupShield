@@ -1,1153 +1,961 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { companyCases } from "../../lib/cases";
 
-const EMPTY = {
-  industry: "",
-  month: "",
-  leads: "",
-  conversions: "",
+const INITIAL = {
+  industry: "Software / AI",
+  prospects: "",
+  buyers: "",
+  conversionTarget: "5",
+  cash: "",
+  revenue: "",
+  fixedCosts: "",
+  variableCosts: "",
+  runwayTarget: "6",
+  units: "",
+  marginTarget: "50",
+  alternatives: "",
+  advantage: "",
+  advantageEvidence: "unknown",
   startingCustomers: "",
   lostCustomers: "",
+  churnTarget: "5",
+  milestonesDue: "",
+  milestonesCompleted: "",
 };
 
-const INITIAL_TARGETS = {
-  conversion: "10",
-  retention: "80",
-  minimumSample: "20",
-};
-
-const EXAMPLES = {
-  weak: {
-    industry: "software",
-    month: "2026-10",
-    leads: "200",
-    conversions: "4",
+const DEMOS = {
+  pressure: {
+    ...INITIAL,
+    prospects: "200",
+    buyers: "4",
+    cash: "24000",
+    revenue: "12000",
+    fixedCosts: "15000",
+    variableCosts: "6000",
+    units: "100",
+    alternatives:
+      "Spreadsheets, an established software provider, and manual work.",
+    advantage:
+      "A simpler workflow that reduces administrative work.",
+    advantageEvidence: "unsupported",
     startingCustomers: "100",
-    lostCustomers: "30",
+    lostCustomers: "12",
+    milestonesDue: "8",
+    milestonesCompleted: "5",
   },
-
   stronger: {
-    industry: "software",
-    month: "2026-10",
-    leads: "100",
-    conversions: "20",
+    ...INITIAL,
+    prospects: "200",
+    buyers: "30",
+    cash: "75000",
+    revenue: "30000",
+    fixedCosts: "15000",
+    variableCosts: "6000",
+    units: "200",
+    alternatives:
+      "Spreadsheets, an established software provider, and manual work.",
+    advantage:
+      "A workflow that buyers in this fictional example preferred for its simpler setup.",
+    advantageEvidence: "supported",
     startingCustomers: "100",
-    lostCustomers: "5",
+    lostCustomers: "2",
+    milestonesDue: "8",
+    milestonesCompleted: "8",
   },
 };
 
-const INDUSTRIES = [
-  "software",
-  "fintech",
-  "retail",
-  "food",
-  "health",
-  "education",
-  "professional_services",
-  "manufacturing",
-  "construction",
-  "beauty",
-  "travel",
-  "logistics",
-  "hardware",
-  "agriculture",
-  "childcare",
-  "fitness",
-  "hospitality",
-  "automotive",
-  "media",
-  "advertising",
-  "human_resources",
-  "environmental_services",
-  "home_services",
-  "nonprofit",
+const GROUPS = [
+  {
+    area: "Demand",
+    title: "Are people paying?",
+    note:
+      "Use unique prospects and paying buyers from the same defined group and period.",
+    fields: [
+      ["prospects", "Qualified prospects", "count"],
+      ["buyers", "Those prospects who became paying buyers", "count"],
+      ["conversionTarget", "Your conversion target (%)", "percent"],
+    ],
+  },
+  {
+    area: "Cash",
+    title: "How much room do you have?",
+    note:
+      "Use one month and USD. Enter every expense once. Revenue is assumed collected in the same month.",
+    fields: [
+      ["cash", "Available cash ($)", "money"],
+      ["revenue", "Monthly revenue ($)", "money"],
+      ["fixedCosts", "Monthly fixed cash costs ($)", "money"],
+      ["variableCosts", "Monthly variable cash costs ($)", "money"],
+      ["runwayTarget", "Your runway target (months)", "number"],
+    ],
+  },
+  {
+    area: "Pricing",
+    title: "Does each sale contribute enough?",
+    note:
+      "Uses the financial inputs above. Pick a consistent unit: an order, completed job, or subscription-month.",
+    fields: [
+      ["units", "Units sold during the month", "count"],
+      ["marginTarget", "Your contribution margin target (%)", "percent"],
+    ],
+  },
+  {
+    area: "Competition",
+    title: "Why would buyers choose you?",
+    note:
+      "This is a guided, self-reported comparison. The app does not search current competitors or interpret the paragraphs.",
+    fields: [],
+  },
+  {
+    area: "Retention & execution",
+    title: "Do customers stay? Can you deliver?",
+    note:
+      "Use one month. Churn suits recurring businesses; leave it blank for one-time purchases. Count milestones defined before the month began.",
+    fields: [
+      ["startingCustomers", "Paying customers at the start", "count"],
+      ["lostCustomers", "Customers from that starting group who left", "count"],
+      ["churnTarget", "Your maximum monthly churn (%)", "percent"],
+      ["milestonesDue", "Milestones due during the month", "count"],
+      ["milestonesCompleted", "Those milestones completed on time", "count"],
+    ],
+  },
 ];
 
-function numberOrUnknown(value) {
-  if (String(value).trim() === "") return null;
-  return Number(value);
+const INDUSTRIES = [
+  "Software / AI",
+  "Retail / Ecommerce",
+  "Food / Hospitality",
+  "Professional services",
+  "Healthcare",
+  "Education",
+  "Manufacturing",
+  "Other",
+];
+
+const INDUSTRY_WORDS = {
+  "Software / AI": ["software", "saas", "artificial intelligence"],
+  "Retail / Ecommerce": ["retail", "ecommerce", "e-commerce"],
+  "Food / Hospitality": ["food", "restaurant", "hospitality"],
+  "Professional services": ["professional", "services"],
+  Healthcare: ["health", "medical"],
+  Education: ["education", "learning"],
+  Manufacturing: ["manufacturing", "hardware"],
+  Other: [],
+};
+
+const STATUS = {
+  attention: "Investigate",
+  target: "Entered target met",
+  unknown: "More evidence needed",
+  evidence: "Self-reported support",
+};
+
+function money(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
-function normalize(value) {
-  return String(value)
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
+function readNumbers(form) {
+  const result = {};
 
-function assessDemand(form, targets) {
-  const errors = [];
+  for (const group of GROUPS) {
+    for (const [key, label, type] of group.fields) {
+      const raw = String(form[key] ?? "").trim();
 
-  const counts = {
-    leads: numberOrUnknown(form.leads),
-    conversions: numberOrUnknown(form.conversions),
-    startingCustomers: numberOrUnknown(form.startingCustomers),
-    lostCustomers: numberOrUnknown(form.lostCustomers),
-  };
+      if (!raw) {
+        result[key] = null;
+        continue;
+      }
 
-  const names = {
-    leads: "Qualified leads",
-    conversions: "Paying conversions",
-    startingCustomers: "Starting customers",
-    lostCustomers: "Lost customers",
-  };
+      const value = Number(raw);
+      const positiveTarget = [
+        "conversionTarget",
+        "marginTarget",
+        "runwayTarget",
+      ].includes(key);
 
-  for (const [key, value] of Object.entries(counts)) {
-    if (
-      value !== null &&
-      (!Number.isFinite(value) ||
-        !Number.isInteger(value) ||
-        value < 0)
-    ) {
-      errors.push(`${names[key]} must be a nonnegative whole number.`);
+      if (
+        !Number.isFinite(value) ||
+        value < 0 ||
+        value > 1e10 ||
+        (type === "count" && !Number.isInteger(value)) ||
+        (type === "percent" && value > 100) ||
+        (positiveTarget && value <= 0)
+      ) {
+        throw new Error(`Check "${label}".`);
+      }
+
+      result[key] = value;
     }
   }
 
-  const conversionTarget = numberOrUnknown(targets.conversion);
-  const retentionTarget = numberOrUnknown(targets.retention);
-  const minimumSample = numberOrUnknown(targets.minimumSample);
-
-  for (const [label, value] of [
-    ["Conversion target", conversionTarget],
-    ["Retention target", retentionTarget],
+  for (const [part, total, message] of [
+    ["buyers", "prospects", "Buyers cannot exceed prospects."],
+    ["lostCustomers", "startingCustomers", "Lost customers cannot exceed starting customers."],
+    ["milestonesCompleted", "milestonesDue", "Completed milestones cannot exceed milestones due."],
   ]) {
     if (
-      value === null ||
-      !Number.isFinite(value) ||
-      value < 0 ||
-      value > 100
+      result[part] !== null &&
+      result[total] !== null &&
+      result[part] > result[total]
     ) {
-      errors.push(`${label} must be between 0 and 100%.`);
+      throw new Error(message);
     }
   }
 
-  if (
-    minimumSample === null ||
-    !Number.isInteger(minimumSample) ||
-    minimumSample < 1
-  ) {
-    errors.push("Minimum sample size must be a positive whole number.");
-  }
-
-  if (
-    counts.leads !== null &&
-    counts.conversions !== null &&
-    counts.conversions > counts.leads
-  ) {
-    errors.push(
-      "Paying conversions cannot exceed the qualified leads they came from."
-    );
-  }
-
-  if (
-    counts.startingCustomers !== null &&
-    counts.lostCustomers !== null &&
-    counts.lostCustomers > counts.startingCustomers
-  ) {
-    errors.push(
-      "Lost customers cannot exceed the starting customer cohort."
-    );
-  }
-
-  if (errors.length) {
-    return { errors, metrics: [], warnings: [], status: "Check inputs" };
-  }
-
-  const conversion =
-    counts.leads > 0 && counts.conversions !== null
-      ? (counts.conversions / counts.leads) * 100
-      : null;
-
-  const retention =
-    counts.startingCustomers > 0 &&
-    counts.lostCustomers !== null
-      ? (
-          (counts.startingCustomers - counts.lostCustomers) /
-          counts.startingCustomers
-        ) * 100
-      : null;
-
-  const metrics = [
-    {
-      id: "conversion",
-      label: "Paid conversion",
-      value: conversion,
-      sample: counts.leads,
-      target: conversionTarget,
-      formula:
-        "Paying conversions ÷ qualified leads from the same measured funnel.",
-      explanation:
-        conversion === null
-          ? "Enter both counts. A zero lead count does not produce a conversion rate."
-          : `${counts.conversions} paying conversions from ${counts.leads} qualified leads.`,
-    },
-
-    {
-      id: "retention",
-      label: "Customer retention",
-      value: retention,
-      sample: counts.startingCustomers,
-      target: retentionTarget,
-      formula:
-        "(Starting customers − lost customers) ÷ starting customers.",
-      explanation:
-        retention === null
-          ? "Enter the starting cohort and how many of those customers were lost."
-          : `${counts.startingCustomers - counts.lostCustomers} of ${
-              counts.startingCustomers
-            } starting customers remained. Newly acquired customers are excluded.`,
-    },
-  ].map((metric) => {
-    const assessable =
-      metric.value !== null &&
-      metric.sample >= minimumSample;
-
-    return {
-      ...metric,
-      assessable,
-      flagged: assessable && metric.value < metric.target,
-
-      status:
-        metric.value === null
-          ? "Not measured"
-          : !assessable
-            ? "Sample too small"
-            : metric.value < metric.target
-              ? "Investigate"
-              : "No flag against your target",
-    };
-  });
-
-  const warnings = metrics
-    .filter((metric) => metric.flagged)
-    .map((metric) => metric.id);
-
-  const assessed = metrics.filter((metric) => metric.assessable).length;
-
-  return {
-    errors: [],
-    metrics,
-    warnings,
-    assessed,
-    minimumSample,
-
-    status:
-      warnings.length > 0
-        ? "Investigate demand"
-        : assessed === 0
-          ? "Insufficient evidence"
-          : assessed < metrics.length
-            ? "Partial evidence · no flag in measured area"
-            : "No flag in supplied demand metrics",
-  };
+  return result;
 }
 
-function selectHistoricalCases(report, industry) {
-  if (!report.warnings.length) return [];
+function diagnose(form) {
+  const n = readNumbers(form);
+  const results = [];
 
-  // These topics are curated from the reviewed company accounts.
-  // They are not fitted statistical similarity scores.
-  const topics = new Map([
-    ["Refolo", ["conversion", "retention"]],
-    ["Tandem", ["retention"]],
-    ["WePlate", ["conversion"]],
-    ["Observa", ["conversion"]],
-    ["StarSync", ["conversion"]],
-    ["Monite", ["conversion"]],
-    ["Young Entrepreneurs Program", ["retention"]],
-  ].map(([name, tags]) => [normalize(name), tags]));
+  function add(area, status, title, finding, next, tags = []) {
+    results.push({ area, status, title, finding, next, tags });
+  }
 
-  const matches = companyCases
-    .filter(
-      (item) =>
-        !item.analogOnly &&
-        !item.identityNeedsReview
-    )
-    .map((item) => {
-      const documentedTopics =
-        topics.get(normalize(item.company)) || [];
+  // DEMAND
+  if (
+    n.prospects === null ||
+    n.prospects === 0 ||
+    n.buyers === null ||
+    n.conversionTarget === null
+  ) {
+    add(
+      "Demand",
+      "unknown",
+      "Demand needs more evidence",
+      "Enter prospects, paying buyers, and a conversion target.",
+      "Run a defined sales or paid-pilot test and record actual purchases."
+    );
+  } else {
+    const rate = (n.buyers / n.prospects) * 100;
+    const small = n.prospects < 20;
+    const below = rate < n.conversionTarget;
 
-      const sharedTopics = report.warnings.filter((warning) =>
-        documentedTopics.includes(warning)
+    add(
+      "Demand",
+      small ? "unknown" : below ? "attention" : "target",
+      small
+        ? "An early demand signal"
+        : below
+          ? "Conversion is below your target"
+          : "Conversion meets your target",
+      `${n.buyers} of ${n.prospects} prospects paid: ` +
+        `${rate.toFixed(1)}% versus your ${n.conversionTarget}% target. ` +
+        (small
+          ? "Samples below 20 are left unclassified by this demonstration rule."
+          : "This describes this group, not total market demand."),
+      below
+        ? "Collect rejection reasons. Test one change to targeting, the offer, or price."
+        : "Repeat with a comparable group and measure whether buyers stay.",
+      below && !small ? ["demand", "conversion"] : []
+    );
+  }
+
+  // CASH
+  const financialsKnown = [
+    n.revenue,
+    n.fixedCosts,
+    n.variableCosts,
+  ].every(value => value !== null);
+
+  if (
+    !financialsKnown ||
+    n.cash === null ||
+    n.runwayTarget === null
+  ) {
+    add(
+      "Cash",
+      "unknown",
+      "Cash evidence is incomplete",
+      "Enter available cash, revenue, both expense categories, and your runway target.",
+      "Use actual receipts and payments, and identify upcoming obligations."
+    );
+  } else {
+    const burn = n.fixedCosts + n.variableCosts - n.revenue;
+
+    if (burn > 0) {
+      const runway = n.cash / burn;
+      const below = runway < n.runwayTarget;
+
+      add(
+        "Cash",
+        below ? "attention" : "target",
+        below
+          ? "Runway is below your target"
+          : "Runway meets your target",
+        `Monthly cash shortfall: ${money(burn)}. ` +
+          `Estimated runway: ${runway.toFixed(1)} months versus ` +
+          `your ${n.runwayTarget}-month target, assuming unchanged monthly levels.`,
+        "Use the financial dashboard to compare cost reductions and revenue downside scenarios.",
+        below ? ["cash", "burn"] : []
       );
+    } else {
+      add(
+        "Cash",
+        n.cash === 0 ? "attention" : "target",
+        n.cash === 0
+          ? "There is no starting cash cushion"
+          : "No net burn at the entered monthly levels",
+        `Revenue minus entered costs is ${money(-burn)} per month. ` +
+          "A burn-based runway estimate does not apply when that amount is nonnegative.",
+        "Check collection delays, seasonality, debt payments, taxes, and reserves.",
+        n.cash === 0 ? ["cash"] : []
+      );
+    }
+  }
 
-      const sameIndustry =
-        Boolean(industry) && item.industry === industry;
+  // PRICING
+  if (
+    !financialsKnown ||
+    n.revenue === 0 ||
+    n.units === null ||
+    n.units === 0 ||
+    n.marginTarget === null
+  ) {
+    add(
+      "Pricing",
+      "unknown",
+      "Unit economics need more evidence",
+      "Enter positive revenue, units sold, fixed and variable costs, and a margin target.",
+      "Choose a consistent sales unit and include all costs that rise with sales."
+    );
+  } else {
+    const price = n.revenue / n.units;
+    const cost = n.variableCosts / n.units;
+    const contribution = price - cost;
+    const margin =
+      ((n.revenue - n.variableCosts) / n.revenue) * 100;
+
+    const below = margin < n.marginTarget;
+    const breakEven =
+      contribution > 0
+        ? `${Math.ceil(n.fixedCosts / contribution).toLocaleString()} units per month`
+        : "not achievable at the entered price and variable cost";
+
+    add(
+      "Pricing",
+      below ? "attention" : "target",
+      contribution <= 0
+        ? "Each unit has no positive contribution"
+        : below
+          ? "Contribution margin is below your target"
+          : "Contribution margin meets your target",
+      `Average price: ${money(price)}. Variable cost per unit: ${money(cost)}. ` +
+        `Contribution margin: ${margin.toFixed(1)}% versus your ` +
+        `${n.marginTarget}% target. Break-even: ${breakEven}.`,
+      "Compare a price change with lower delivery costs. Include possible customer loss.",
+      below ? ["pricing", "margin", "unit_economics"] : []
+    );
+  }
+
+  // COMPETITION
+  if (!form.alternatives.trim() || !form.advantage.trim()) {
+    add(
+      "Competition",
+      "unknown",
+      "Your comparison is incomplete",
+      "Describe the alternatives buyers use and your proposed advantage.",
+      "Include direct competitors, manual work, spreadsheets, and doing nothing."
+    );
+  } else if (form.advantageEvidence === "unsupported") {
+    add(
+      "Competition",
+      "attention",
+      "Your advantage lacks reported buyer support",
+      "You reported testing the advantage without finding supporting buyer evidence.",
+      "Ask why buyers prefer their current alternative, then test a revised offer.",
+      ["competition", "differentiation"]
+    );
+  } else if (form.advantageEvidence === "supported") {
+    add(
+      "Competition",
+      "evidence",
+      "You report support for your advantage",
+      "This assessment records your evidence selection. It has not independently verified your claim or competitor information.",
+      "Check competitor claims against dated sources and test whether preference leads to purchases."
+    );
+  } else {
+    add(
+      "Competition",
+      "unknown",
+      "Your advantage remains a hypothesis",
+      "You described a proposed advantage but have not reported testing it with buyers.",
+      "Compare offers with target buyers and record their choices and reasons."
+    );
+  }
+
+  // RETENTION AND EXECUTION
+  const retentionKnown =
+    n.startingCustomers !== null &&
+    n.startingCustomers > 0 &&
+    n.lostCustomers !== null &&
+    n.churnTarget !== null;
+
+  const executionKnown =
+    n.milestonesDue !== null &&
+    n.milestonesDue > 0 &&
+    n.milestonesCompleted !== null;
+
+  const churn = retentionKnown
+    ? (n.lostCustomers / n.startingCustomers) * 100
+    : null;
+
+  const missed = executionKnown
+    ? n.milestonesDue - n.milestonesCompleted
+    : null;
+
+  const retentionFlag = retentionKnown && churn > n.churnTarget;
+  const executionFlag = executionKnown && missed > 0;
+
+  add(
+    "Retention & execution",
+    retentionFlag || executionFlag
+      ? "attention"
+      : retentionKnown && executionKnown
+        ? "target"
+        : "unknown",
+    retentionFlag || executionFlag
+      ? "Investigate customer loss or delivery gaps"
+      : retentionKnown && executionKnown
+        ? "Entered operational targets are met"
+        : "Operational evidence is incomplete",
+    [
+      retentionKnown
+        ? `${n.lostCustomers} of ${n.startingCustomers} starting customers left: ` +
+          `${churn.toFixed(1)}% churn versus your ${n.churnTarget}% maximum target.`
+        : "Retention cannot be assessed from these inputs.",
+      executionKnown
+        ? `${n.milestonesCompleted} of ${n.milestonesDue} milestones were completed on time; ` +
+          `${missed} were missed. Counts do not capture importance.`
+        : "Execution cannot be assessed from these inputs.",
+    ].join(" "),
+    "Interview departing customers and review missed commitments. Measure one improvement next month.",
+    [
+      ...(retentionFlag ? ["retention"] : []),
+      ...(executionFlag ? ["execution", "scaling"] : []),
+    ]
+  );
+
+  return results;
+}
+
+function findCases(result, industry) {
+  if (!result.tags.length) return [];
+
+  const words = INDUSTRY_WORDS[industry] || [];
+
+  return companyCases
+    .filter(item => !item.analogOnly && !item.identityNeedsReview)
+    .map(item => {
+      const tags = Array.isArray(item.tags) ? item.tags : [];
+      const sector = String(item.industry || "").toLowerCase();
 
       return {
         ...item,
-        sharedTopics,
-        sameIndustry,
-        points:
-          sharedTopics.length * 4 +
-          (sameIndustry ? 6 : 0),
-
-        comparison:
-          sameIndustry
-            ? "Same-sector qualitative context"
-            : "Cross-sector analogy",
+        matched: tags.filter(tag => result.tags.includes(tag)),
+        sectorMatch: words.some(word => sector.includes(word)),
       };
     })
-    .filter((item) => item.sharedTopics.length > 0)
+    .filter(item => item.matched.length > 0)
     .sort(
       (a, b) =>
-        b.points - a.points ||
-        a.company.localeCompare(b.company)
+        Number(b.sectorMatch) - Number(a.sectorMatch) ||
+        b.matched.length - a.matched.length
     )
     .slice(0, 2);
+}
 
-  // Include a separately labeled strategy account.
-  // Do not claim this company recovered from the same demand problem.
-  const strategy = companyCases
-    .filter((item) =>
-      ["Reform", "Tally"].includes(item.company)
-    )
-    .sort(
-      (a, b) =>
-        Number(b.industry === industry) -
-          Number(a.industry === industry) ||
-        a.company.localeCompare(b.company)
-    )[0];
+function safeUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
-  if (strategy) {
-    matches.push({
-      ...strategy,
-      sharedTopics: [],
-      comparison:
-        "Related customer-validation strategy · not a proven recovery",
+export default function MarketCheckupPage() {
+  const [form, setForm] = useState({ ...INITIAL });
+  const [report, setReport] = useState(null);
+  const [fictional, setFictional] = useState(false);
+  const [error, setError] = useState("");
+
+  function loadDemo(type) {
+    const demo = { ...DEMOS[type] };
+
+    setForm(demo);
+    setFictional(true);
+    setError("");
+    setReport({
+      results: diagnose(demo),
+      industry: demo.industry,
+      fictional: true,
     });
   }
 
-  return matches;
-}
-
-export default function DemandDiagnosticsPage() {
-  const [form, setForm] = useState({ ...EMPTY });
-  const [targets, setTargets] = useState({ ...INITIAL_TARGETS });
-  const [isSample, setIsSample] = useState(false);
-
-  const report = useMemo(
-    () => assessDemand(form, targets),
-    [form, targets]
-  );
-
-  const historicalCases = useMemo(
-    () => selectHistoricalCases(report, form.industry),
-    [report, form.industry]
-  );
-
-  function updateField(key, value) {
-    setForm((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
+  function update(key, value) {
+    setForm(previous => ({ ...previous, [key]: value }));
+    setReport(null);
+    setError("");
   }
 
-  function updateTarget(key, value) {
-    setTargets((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
-  }
+  function submit(event) {
+    event.preventDefault();
 
-  function loadExample(name) {
-    setForm({ ...EXAMPLES[name] });
-    setIsSample(true);
-  }
-
-  function clearInputs() {
-    setForm({ ...EMPTY });
-    setIsSample(false);
-  }
-
-  function exportReport() {
-    const output = {
-      feature: "StartupShield — Demand and retention",
-      dataKind: isSample
-        ? "Fictional or edited sample"
-        : "User-entered",
-      inputs: form,
-      planningTargets: targets,
-      assessment: report,
-      historicalCases,
-      limitation:
-        "Demand signals and qualitative historical context. " +
-        "Not proof of product-market fit or a prediction of survival.",
-    };
-
-    const blob = new Blob(
-      [JSON.stringify(output, null, 2)],
-      { type: "application/json" }
-    );
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = "startupshield-demand-report.json";
-    link.click();
-
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      setReport({
+        results: diagnose(form),
+        industry: form.industry,
+        fictional,
+      });
+      setError("");
+    } catch (err) {
+      setReport(null);
+      setError(err.message);
+    }
   }
 
   return (
-    <div className="demand-page">
-      <header className="hero">
-        <a href="/" className="brand">
-          startup<i>shield</i> ↗
-        </a>
+    <main className="checkup">
+      <a href="/" className="brand">StartupShield</a>
 
-        <p className="eyebrow">PART 1 · DEMAND AND RETENTION</p>
+      <header>
+        <p className="eyebrow">RESEARCH MY MARKET / FIVE-RISK CHECKUP</p>
 
         <h1>
-          Are customers
+          Less guesswork.
           <br />
-          <em>finding the value?</em>
+          <em>A clearer next move.</em>
         </h1>
 
         <p className="intro">
-          Measure paid interest and customer retention.
-          Understand the gaps. Learn from documented company experiences.
-        </p>
-
-        <p className="fine">
-          Runs in your browser. No AI key required.
-          This page assesses demand—not the health of your entire business.
+          Explore demand, cash, pricing, competition, and delivery
+          using your own evidence and related historical experiences.
         </p>
       </header>
 
-      <div className="toolbar">
-        <span>TRY FICTIONAL INPUTS</span>
+      <section className="demo">
+        <strong>Demo mode — no typing required</strong>
 
-        <button onClick={() => loadExample("weak")}>
-          Weak demand
-        </button>
+        <p>
+          Choose a fictional business profile to load the form
+          and generate all five assessments immediately.
+        </p>
 
-        <button onClick={() => loadExample("stronger")}>
-          Stronger demand
-        </button>
+        <div className="buttons">
+          <button type="button" onClick={() => loadDemo("pressure")}>
+            Demo: under pressure
+          </button>
 
-        <button onClick={clearInputs}>
-          Clear inputs
-        </button>
-      </div>
+          <button type="button" onClick={() => loadDemo("stronger")}>
+            Demo: stronger business
+          </button>
 
-      {isSample && (
-        <p className="sample-banner">
-          Fictional example or edited sample.
-          Clear the inputs before entering a real company.
+          <button
+            type="button"
+            onClick={() => {
+              setForm({ ...INITIAL });
+              setReport(null);
+              setFictional(false);
+              setError("");
+            }}
+          >
+            Clear demo
+          </button>
+        </div>
+      </section>
+
+      {fictional && (
+        <p className="notice">
+          DEMO MODE — fictional inputs and claims. These examples
+          do not establish that any particular intervention works.
         </p>
       )}
 
-      <div className="layout">
-        <aside className="input-panel">
-          <h2>Your evidence.</h2>
+      {report && (
+        <section className="results" aria-live="polite">
+          <p className="eyebrow">YOUR RESULTS</p>
+          <h2>What the evidence says.</h2>
 
-          <p className="fine">
-            Leave unknown values blank.
-            Enter 0 only when zero was observed.
-            Use the same measurement month for the counts below.
+          <div className="summary">
+            {report.results.map(result => (
+              <a
+                key={result.area}
+                href={`#result-${result.area.replace(/[^a-z]/gi, "")}`}
+                className={`summaryItem ${result.status}`}
+              >
+                <strong>{result.area}</strong>
+                <span>{STATUS[result.status]}</span>
+              </a>
+            ))}
+          </div>
+
+          {report.results.map(result => {
+            const cases = findCases(result, report.industry);
+
+            return (
+              <article
+                className="panel"
+                id={`result-${result.area.replace(/[^a-z]/gi, "")}`}
+                key={result.area}
+                style={{ scrollMarginTop: "110px" }}
+              >
+                <div className="resultHeader">
+                  <p className="eyebrow">{result.area}</p>
+                  <span className={`badge ${result.status}`}>
+                    {STATUS[result.status]}
+                  </span>
+                </div>
+
+                <h3>{result.title}</h3>
+                <p>{result.finding}</p>
+
+                <div className="next">
+                  <strong>Next investigation</strong>
+                  <p>{result.next}</p>
+                </div>
+
+                {cases.length > 0 ? (
+                  <div className="cases">
+                    <h4>Related historical experiences</h4>
+
+                    {cases.map(item => {
+                      const url = safeUrl(item.sourceUrl || item.url);
+
+                      return (
+                        <article className="story" key={item.id}>
+                          <h3>{item.company}</h3>
+
+                          <p className="small">
+                            Shared tags: {item.matched.join(", ")}.
+                            {item.sectorMatch
+                              ? " Industry metadata also overlaps."
+                              : " This may be a cross-industry comparison."}
+                          </p>
+
+                          <p>
+                            <strong>Challenge: </strong>
+                            {item.problem || "Not documented."}
+                          </p>
+
+                          <p>
+                            <strong>Reported response: </strong>
+                            {item.response || "Not documented."}
+                          </p>
+
+                          <p>
+                            <strong>Reported outcome: </strong>
+                            {item.outcome || item.result || "Not documented."}
+                          </p>
+
+                          <p className="small">
+                            <strong>Comparison limits: </strong>
+                            {item.limitation ||
+                              "Differences in scale, market, and period may limit relevance."}
+                          </p>
+
+                          {url && (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Read the source ↗
+                            </a>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="small">
+                    {result.tags.length
+                      ? "No eligible historical case shares these tags in the current library."
+                      : "No risk-based historical match selected for this result."}
+                  </p>
+                )}
+              </article>
+            );
+          })}
+
+          <p className="small">
+            Meeting a target does not establish overall business health.
+            Historical matching uses tags and approximate industry metadata,
+            not statistical similarity. Reported outcomes do not establish
+            causation. This tool does not predict startup failure.
           </p>
+        </section>
+      )}
+
+      <form onSubmit={submit}>
+        <section className="panel">
+          <h2>{report ? "Explore the loaded inputs." : "Start with your evidence."}</h2>
 
           <label>
-            Specific industry
+            Industry
             <select
               value={form.industry}
-              onChange={(event) =>
-                updateField("industry", event.target.value)
-              }
+              onChange={event => update("industry", event.target.value)}
             >
-              <option value="">Unknown / choose an industry</option>
-
-              {INDUSTRIES.map((industry) => (
-                <option key={industry} value={industry}>
-                  {industry.replace(/_/g, " ")}
-                </option>
+              {INDUSTRIES.map(industry => (
+                <option key={industry}>{industry}</option>
               ))}
             </select>
           </label>
 
-          <label>
-            Measurement month
-            <input
-              type="month"
-              value={form.month}
-              onChange={(event) =>
-                updateField("month", event.target.value)
-              }
-            />
-          </label>
-
-          <h3>Paid interest</h3>
-
-          <p className="fine">
-            Count paying conversions from the same measured group
-            of qualified leads. Do not mix unrelated customers
-            with this funnel.
+          <p className="small">
+            Leave unknown values blank. Editable targets are planning
+            assumptions, not validated industry benchmarks. Calculations
+            run in your browser without an AI API.
           </p>
+        </section>
 
-          <label>
-            Qualified leads
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Unknown"
-              value={form.leads}
-              onChange={(event) =>
-                updateField("leads", event.target.value)
-              }
-            />
-          </label>
-
-          <label>
-            Paying conversions from those leads
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Unknown"
-              value={form.conversions}
-              onChange={(event) =>
-                updateField("conversions", event.target.value)
-              }
-            />
-          </label>
-
-          <h3>Customer retention</h3>
-
-          <p className="fine">
-            Follow customers present at the start of the month.
-            Exclude newly acquired customers from both counts.
-          </p>
-
-          <label>
-            Customers in the starting cohort
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Unknown"
-              value={form.startingCustomers}
-              onChange={(event) =>
-                updateField(
-                  "startingCustomers",
-                  event.target.value
-                )
-              }
-            />
-          </label>
-
-          <label>
-            Customers lost from that cohort
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Unknown"
-              value={form.lostCustomers}
-              onChange={(event) =>
-                updateField(
-                  "lostCustomers",
-                  event.target.value
-                )
-              }
-            />
-          </label>
-
-          <details>
-            <summary>Set your planning targets</summary>
-
-            <p className="fine">
-              These defaults are illustrative—not industry averages
-              or validated failure thresholds.
-              Choose targets appropriate to your business.
+        {GROUPS.map((group, index) => (
+          <section className="panel" key={group.area}>
+            <p className="eyebrow">
+              0{index + 1} / {group.area}
             </p>
 
-            <label>
-              Minimum paid conversion (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="any"
-                value={targets.conversion}
-                onChange={(event) =>
-                  updateTarget(
-                    "conversion",
-                    event.target.value
-                  )
-                }
-              />
-            </label>
+            <h2>{group.title}</h2>
+            <p className="small">{group.note}</p>
 
-            <label>
-              Minimum cohort retention (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="any"
-                value={targets.retention}
-                onChange={(event) =>
-                  updateTarget(
-                    "retention",
-                    event.target.value
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Minimum observations for a directional flag
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={targets.minimumSample}
-                onChange={(event) =>
-                  updateTarget(
-                    "minimumSample",
-                    event.target.value
-                  )
-                }
-              />
-            </label>
-          </details>
-
-          <p className="fine">
-            Results update as you type.
-            Inputs stay in this page session.
-            Refreshing clears them; export to keep a copy.
-          </p>
-        </aside>
-
-        <main className="results" aria-live="polite">
-          {report.errors.length > 0 ? (
-            <div className="error">
-              <h2>Check these inputs.</h2>
-
-              <ul>
-                {report.errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
+            <div className="grid">
+              {group.fields.map(([key, label, type]) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    type="number"
+                    min="0"
+                    max={type === "percent" ? "100" : undefined}
+                    step={type === "count" ? "1" : "any"}
+                    value={form[key]}
+                    placeholder="Unknown"
+                    onChange={event => update(key, event.target.value)}
+                  />
+                </label>
+              ))}
             </div>
-          ) : (
-            <>
-              <div className="report-heading">
-                <div>
-                  <p className="eyebrow">YOUR DEMAND BRIEF</p>
-                  <h2>{report.status}</h2>
-                  <p className="fine">
-                    {form.month || "Measurement month not set"}
-                    {" · "}
-                    {report.assessed} of 2 metrics assessable
-                  </p>
-                </div>
 
-                <button onClick={exportReport}>
-                  Export report ↗
-                </button>
-              </div>
+            {group.area === "Competition" && (
+              <>
+                <label>
+                  What alternatives do buyers currently use?
+                  <textarea
+                    rows={3}
+                    maxLength={2000}
+                    value={form.alternatives}
+                    onChange={event =>
+                      update("alternatives", event.target.value)
+                    }
+                  />
+                </label>
 
-              <div className="metrics">
-                {report.metrics.map((metric) => (
-                  <article
-                    key={metric.id}
-                    className={
-                      metric.flagged
-                        ? "metric flagged"
-                        : "metric"
+                <label>
+                  What is your proposed advantage?
+                  <textarea
+                    rows={3}
+                    maxLength={1500}
+                    value={form.advantage}
+                    onChange={event =>
+                      update("advantage", event.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  What evidence supports the advantage?
+                  <select
+                    value={form.advantageEvidence}
+                    onChange={event =>
+                      update("advantageEvidence", event.target.value)
                     }
                   >
-                    <p className="eyebrow">{metric.label}</p>
+                    <option value="unknown">Not tested / unknown</option>
+                    <option value="supported">
+                      Tested with buyers; found supporting evidence
+                    </option>
+                    <option value="unsupported">
+                      Tested with buyers; did not find supporting evidence
+                    </option>
+                  </select>
+                </label>
+              </>
+            )}
+          </section>
+        ))}
 
-                    <strong>
-                      {metric.value === null
-                        ? "—"
-                        : `${metric.value.toFixed(1)}%`}
-                    </strong>
+        {error && <p className="error" role="alert">{error}</p>}
 
-                    <span className="status">
-                      {metric.status}
-                    </span>
+        <button className="primary" type="submit">
+          Run my five-risk checkup ↗
+        </button>
+      </form>
 
-                    <p>{metric.explanation}</p>
-
-                    <p className="fine">
-                      {metric.formula}
-                    </p>
-
-                    <p className="fine">
-                      Your target: {metric.target}%.
-                      Minimum observations: {report.minimumSample}.
-                    </p>
-                  </article>
-                ))}
-              </div>
-
-              <article className="brief">
-                <p className="eyebrow">WHAT THE EVIDENCE SAYS</p>
-
-                {report.warnings.includes("conversion") && (
-                  <p>
-                    <b>Paid interest needs investigation.</b>{" "}
-                    Conversion is below your selected target.
-                    Investigate whether the issue is buyer fit,
-                    the value proposition, price, or the acquisition channel.
-                  </p>
-                )}
-
-                {report.warnings.includes("retention") && (
-                  <p>
-                    <b>Retention needs investigation.</b>{" "}
-                    Too few starting-cohort customers remained
-                    relative to your selected target.
-                    Ask lost customers what changed and where
-                    the product failed to provide value.
-                  </p>
-                )}
-
-                {!report.warnings.length && (
-                  <p>
-                    {report.assessed === 0
-                      ? "There is not enough evidence to make a directional assessment yet."
-                      : "The assessable metrics do not fall below your selected targets. This does not establish product-market fit or overall business health."}
-                  </p>
-                )}
-
-                {report.assessed < 2 && (
-                  <p className="fine">
-                    At least one metric is missing, has a zero
-                    denominator, or has fewer observations than
-                    your minimum. That area remains unassessed.
-                  </p>
-                )}
-
-                <p className="fine">
-                  These measurements identify questions to investigate.
-                  They do not establish the cause of weak demand.
-                </p>
-              </article>
-
-              <article className="next">
-                <p className="eyebrow">NEXT INVESTIGATION</p>
-
-                <h3>Find out where value breaks down.</h3>
-
-                <ol>
-                  <li>
-                    Interview recent non-buyers and lost customers
-                    separately. Record reasons rather than assuming them.
-                  </li>
-
-                  <li>
-                    Compare customer segments and acquisition channels
-                    using the same funnel definitions.
-                  </li>
-
-                  <li>
-                    Test one change to the offer, onboarding,
-                    or target customer. Track conversion and retention
-                    without changing every variable at once.
-                  </li>
-                </ol>
-
-                <p className="fine">
-                  This is an experiment to investigate—not a
-                  guaranteed intervention. The current aggregate
-                  inputs do not identify your best or worst customer segment.
-                </p>
-              </article>
-
-              <section className="historical">
-                <p className="eyebrow">HISTORICAL CONTEXT</p>
-
-                <h2>Other chapters.<br /><em>Useful perspective.</em></h2>
-
-                {historicalCases.length > 0 ? (
-                  historicalCases.map((item) => (
-                    <article className="story" key={item.id}>
-                      <p className="eyebrow">{item.comparison}</p>
-
-                      <h3>{item.company}</h3>
-
-                      {item.sharedTopics.length > 0 && (
-                        <p className="fine">
-                          Related issue: {item.sharedTopics.join(", ")}
-                        </p>
-                      )}
-
-                      <dl>
-                        <dt>DOCUMENTED SITUATION</dt>
-                        <dd>{item.problem}</dd>
-
-                        <dt>WHAT THEY REPORTED DOING</dt>
-                        <dd>{item.response}</dd>
-
-                        <dt>REPORTED OUTCOME</dt>
-                        <dd>{item.outcome}</dd>
-                      </dl>
-
-                      <p className="limitations">
-                        {item.limitation}
-                      </p>
-
-                      <a
-                        href={item.sourceUrl || item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Read original source ↗
-                      </a>
-
-                      {(item.followupUrl || item.followup) && (
-                        <a
-                          href={item.followupUrl || item.followup}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {" "}Follow-up ↗
-                        </a>
-                      )}
-                    </article>
-                  ))
-                ) : (
-                  <p className="empty">
-                    {report.warnings.length > 0
-                      ? "No relevant reviewed case was found in the connected library. Check that lib/cases.js is connected to your 100-case file."
-                      : "An intervention analogy is selected only when the supplied demand metrics trigger a warning."}
-                  </p>
-                )}
-
-                <p className="fine">
-                  Matching uses reviewed topics and the selected sector.
-                  It is not statistical similarity. Historical actions
-                  may have failed, and reported improvements do not
-                  establish causation.
-                </p>
-              </section>
-            </>
-          )}
-        </main>
-      </div>
+      <footer>
+        <a href="/">← Back to financial dashboard</a>
+      </footer>
 
       <style jsx>{`
-        .demand-page {
-          min-height: 100vh;
-          padding: 30px clamp(18px, 4vw, 70px) 70px;
+        .checkup {
           background: #f8f7f3;
           color: #34372f;
-          font: 15px/1.65 Arial, sans-serif;
+          min-height: 100vh;
+          padding: 35px max(20px, calc((100% - 1000px) / 2)) 65px;
+          font-family: Arial, sans-serif;
+          line-height: 1.65;
         }
-
-        .demand-page * {
-          box-sizing: border-box;
-        }
-
-        .hero {
-          max-width: 900px;
-          margin: 0 auto 45px;
-          text-align: center;
-        }
-
         .brand {
-          color: #34372f;
+          font-family: Georgia, serif;
+          font-size: 27px;
+          font-style: italic;
           text-decoration: none;
-          font: 27px Georgia, serif;
+          color: inherit;
         }
-
-        .hero h1 {
-          margin: 30px 0 22px;
-          font: normal clamp(48px, 7vw, 86px)/1.06 Georgia, serif;
+        header { padding: 25px 0; }
+        h1, h2, h3 {
+          font-family: Georgia, serif;
+          font-weight: 400;
+          line-height: 1.15;
+        }
+        h1 {
+          font-size: clamp(46px, 7vw, 80px);
           letter-spacing: -2px;
+          margin: 20px 0;
         }
-
-        .intro {
-          max-width: 640px;
-          margin: 0 auto 15px;
-          font-size: 19px;
-          color: #70756a;
-        }
-
+        h2 { font-size: 32px; margin: 12px 0 22px; }
+        h3 { font-size: 27px; margin: 15px 0; }
+        h4 { font-size: 17px; }
         .eyebrow {
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 1.8px;
+          font-size: 11px;
+          letter-spacing: 2px;
           text-transform: uppercase;
-          color: #173fb8;
         }
-
-        .fine {
-          font-size: 12px;
-          color: #74796e;
+        .intro { color: #707568; max-width: 650px; font-size: 18px; }
+        .demo, .panel {
+          border: 1px solid #deded5;
+          border-radius: 17px;
+          padding: 27px;
+          margin-bottom: 22px;
         }
-
-        .toolbar {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 10px;
-          padding: 20px 0;
-          margin-bottom: 26px;
-          border-top: 1px solid #dcdfd3;
-          border-bottom: 1px solid #dcdfd3;
-        }
-
-        .toolbar > span {
-          margin-right: 10px;
-          font-size: 10px;
-          letter-spacing: 1px;
-        }
-
+        .demo { background: #edf0f9; }
+        .panel { background: #fcfbf8; }
+        .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
         button {
-          padding: 10px 17px;
-          border: 1px solid #d1d5c8;
-          border-radius: 30px;
-          background: transparent;
+          padding: 12px 18px;
+          border: 1px solid #cdd0c3;
+          border-radius: 28px;
+          background: #fffefa;
           color: #34372f;
           font: inherit;
           cursor: pointer;
         }
-
-        button:hover {
-          background: #eaece3;
+        .primary {
+          width: 100%;
+          border: 0;
+          background: #193ec2;
+          color: white;
+          padding: 19px;
+          font-size: 18px;
         }
-
-        button:focus-visible,
-        input:focus-visible,
-        select:focus-visible,
-        summary:focus-visible,
-        a:focus-visible {
-          outline: 3px solid #7087db;
-          outline-offset: 3px;
-        }
-
-        .sample-banner {
-          padding: 14px 18px;
-          border: 1px solid #e8d8b7;
-          border-radius: 9px;
-          background: #f5ecd9;
-          font-size: 12px;
-        }
-
-        .layout {
+        .grid {
           display: grid;
-          grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
-          gap: 40px;
-          max-width: 1400px;
-          margin: auto;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
         }
-
-        .input-panel {
-          padding-right: 28px;
-          border-right: 1px solid #dcdfd3;
-        }
-
-        h2 {
-          margin: 12px 0 18px;
-          font: normal 34px/1.15 Georgia, serif;
-        }
-
-        h3 {
-          margin: 25px 0 12px;
-          font: normal 26px/1.2 Georgia, serif;
-        }
-
         label {
           display: flex;
           flex-direction: column;
-          gap: 7px;
-          margin: 17px 0;
-          color: #6b7262;
-          font-size: 12px;
+          gap: 8px;
+          margin-bottom: 17px;
+          font-size: 14px;
+          color: #686e60;
+          min-width: 0;
         }
-
-        input,
-        select {
+        input, textarea, select {
+          box-sizing: border-box;
           width: 100%;
-          padding: 12px;
-          border: 1px solid #d5d9cd;
-          border-radius: 8px;
+          min-width: 0;
+          padding: 13px;
+          border: 1px solid #d5d8cc;
+          border-radius: 11px;
           background: #fffefa;
           color: #34372f;
           font: inherit;
+          font-size: 16px;
         }
-
-        input::placeholder {
-          color: #9a9e91;
+        textarea { resize: vertical; }
+        input:focus, textarea:focus, select:focus {
+          outline: 2px solid #193ec2;
         }
-
-        details {
-          margin-top: 25px;
-          padding-top: 18px;
-          border-top: 1px solid #dcdfd3;
-        }
-
-        summary {
-          cursor: pointer;
-          font-size: 13px;
-        }
-
-        .results {
-          min-width: 0;
-        }
-
-        .report-heading {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-        }
-
-        .report-heading button {
-          white-space: nowrap;
-        }
-
-        .metrics {
+        .small { font-size: 12px; color: #737868; }
+        .notice, .error { padding: 15px; border-radius: 12px; }
+        .notice { background: #f4eadb; color: #775521; }
+        .error { background: #f9e8e8; color: #912e2e; }
+        .results { margin: 40px 0 55px; }
+        .summary {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 18px;
+          grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+          gap: 10px;
+          margin-bottom: 25px;
         }
-
-        .metric,
-        .brief,
-        .next,
-        .story {
-          padding: 25px;
-          margin: 20px 0;
-          border: 1px solid #dcded4;
+        .summaryItem {
           border-radius: 12px;
-          background: #fffefa;
+          padding: 16px;
+          text-decoration: none;
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
         }
-
-        .metric {
-          margin: 10px 0 20px;
+        .summaryItem span { font-size: 12px; }
+        .resultHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
         }
-
-        .metric.flagged {
-          border-color: #d9bca0;
-          background: #fcf7ee;
-        }
-
-        .metric strong {
-          display: block;
-          margin: 12px 0;
-          font: normal 51px/1 Georgia, serif;
-        }
-
-        .metric p {
+        .badge {
           font-size: 12px;
+          border-radius: 25px;
+          padding: 7px 12px;
         }
-
-        .status {
-          display: inline-block;
-          padding: 5px 10px;
-          border-radius: 20px;
-          background: #eceee5;
-          font-size: 10px;
-        }
-
-        .flagged .status {
-          background: #f0e0c7;
-          color: #855e26;
-        }
-
-        .brief,
+        .attention { background: #f5e6d6; color: #85551d; }
+        .target, .evidence { background: #e7eddf; color: #445a35; }
+        .unknown { background: #ecebe7; color: #666a60; }
         .next {
-          background: #eef1fa;
-          border-color: #dce2f3;
-        }
-
-        .next li {
-          margin: 12px 0;
-          font-size: 13px;
-        }
-
-        .historical {
-          margin-top: 38px;
-        }
-
-        .story h3 {
-          margin-top: 8px;
-          font-size: 31px;
-        }
-
-        dt {
-          margin-top: 17px;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 1px;
-        }
-
-        dd {
-          margin: 5px 0;
-          color: #68715e;
-          font-size: 13px;
-        }
-
-        .limitations {
-          padding: 15px;
-          border-radius: 8px;
-          background: #f0f1e9;
-          color: #727869;
-          font-size: 12px;
-        }
-
-        .story a {
-          color: #173fb8;
-          font-size: 12px;
-          text-decoration: underline;
-        }
-
-        .empty {
-          padding: 24px;
-          border: 1px dashed #d3d8c8;
-          border-radius: 10px;
-          color: #72796a;
-          font-size: 13px;
-        }
-
-        .error {
-          padding: 25px;
-          border: 1px solid #e2b7b7;
+          padding: 18px;
+          background: #edf0f9;
           border-radius: 12px;
-          background: #fbefef;
+          margin: 20px 0;
         }
-
-        @media (max-width: 900px) {
-          .layout {
-            grid-template-columns: 1fr;
-          }
-
-          .input-panel {
-            padding-right: 0;
-            border-right: 0;
-          }
+        .next p { margin-bottom: 0; }
+        .cases {
+          border-top: 1px solid #deded5;
+          padding-top: 16px;
+          margin-top: 24px;
         }
-
-        @media (max-width: 560px) {
-          .metrics {
-            grid-template-columns: 1fr;
-          }
-
-          .report-heading {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .metric,
-          .brief,
-          .next,
-          .story {
-            padding: 20px;
-          }
+        .story {
+          background: #eeeee7;
+          border-radius: 12px;
+          padding: 20px;
+          margin-top: 15px;
+          overflow-wrap: anywhere;
+        }
+        .story p { font-size: 14px; }
+        a { color: #193ec2; }
+        footer { margin-top: 35px; }
+        @media (max-width: 600px) {
+          .grid { grid-template-columns: 1fr; gap: 0; }
+          .panel, .demo { padding: 20px; }
         }
       `}</style>
-    </div>
+    </main>
   );
 }

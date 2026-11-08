@@ -245,10 +245,11 @@ export async function POST(request) {
       ).replaceAll(GEMINI_API_KEY, "[REDACTED]");
 
       if (response.status === 429) {
-        console.error(
-          "Gemini quota details:",
-          safeMessage
-        );
+       console.error(
+  "Gemini quota details:",
+  JSON.stringify(details, null, 2)
+    .replaceAll(GEMINI_API_KEY, "[REDACTED]")
+);
 
         const retryInfo = details.error?.details?.find(
           (item) =>

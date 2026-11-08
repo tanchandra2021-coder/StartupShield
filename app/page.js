@@ -1,9 +1,8 @@
 import Dashboard from "./Dashboard";
-import GeminiMarketPage from "./market/page";
+import CheckupPage from "./market/page";
 
 export default function HomePage() {
   const linkStyle = {
-    display: "inline-block",
     padding: "11px 20px",
     border: "1px solid #d5d8cc",
     borderRadius: "30px",
@@ -23,9 +22,10 @@ export default function HomePage() {
           zIndex: 100,
           display: "flex",
           justifyContent: "center",
+          alignItems: "center",
           flexWrap: "wrap",
           gap: "12px",
-          padding: "15px 20px",
+          padding: "16px 20px",
           background: "#f8f7f3",
           borderBottom: "1px solid #deded5",
         }}
@@ -35,15 +35,15 @@ export default function HomePage() {
         </a>
 
         <a
-          href="#gemini-market-research"
+          href="#five-risk-checkup"
           style={{
             ...linkStyle,
             background: "#153cbd",
             borderColor: "#153cbd",
-            color: "white",
+            color: "#ffffff",
           }}
         >
-          Research my market with Gemini ↗
+          Run my five-risk checkup ↗
         </a>
 
         <a href="/diagnostics" style={linkStyle}>
@@ -53,23 +53,28 @@ export default function HomePage() {
 
       <div
         id="financial-dashboard"
-        style={{ scrollMarginTop: "95px" }}
+        style={{ scrollMarginTop: "110px" }}
       >
         <Dashboard />
       </div>
 
-      <section
+      {/* Preserve existing dashboard links to the old Gemini section. */}
+      <div
         id="gemini-market-research"
-        aria-label="Gemini market research"
-        style={{
-          scrollMarginTop: "95px",
-          padding: "35px 0 60px",
-          borderTop: "1px solid #deded5",
-          background: "#f8f7f3",
-        }}
+        style={{ scrollMarginTop: "110px" }}
       >
-        <GeminiMarketPage />
-      </section>
+        <section
+          id="five-risk-checkup"
+          aria-label="Five-risk business checkup"
+          style={{
+            scrollMarginTop: "110px",
+            borderTop: "1px solid #deded5",
+            background: "#f8f7f3",
+          }}
+        >
+          <CheckupPage />
+        </section>
+      </div>
     </>
   );
 }

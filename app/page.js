@@ -2,6 +2,17 @@ import Dashboard from "./Dashboard";
 import GeminiMarketPage from "./market/page";
 
 export default function HomePage() {
+  const linkStyle = {
+    display: "inline-block",
+    padding: "11px 20px",
+    border: "1px solid #d5d8cc",
+    borderRadius: "30px",
+    color: "#34372f",
+    textDecoration: "none",
+    fontFamily: "Arial, sans-serif",
+    fontSize: "14px",
+  };
+
   return (
     <>
       <nav
@@ -12,63 +23,37 @@ export default function HomePage() {
           zIndex: 100,
           display: "flex",
           justifyContent: "center",
-          alignItems: "center",
           flexWrap: "wrap",
           gap: "12px",
-          padding: "16px 20px",
+          padding: "15px 20px",
           background: "#f8f7f3",
           borderBottom: "1px solid #deded5",
         }}
       >
-        <a
-          href="#financial-dashboard"
-          style={{
-            padding: "11px 20px",
-            border: "1px solid #d5d8cc",
-            borderRadius: "30px",
-            color: "#34372f",
-            textDecoration: "none",
-            fontFamily: "Arial, sans-serif",
-            fontSize: "14px",
-          }}
-        >
+        <a href="#financial-dashboard" style={linkStyle}>
           Financial dashboard
         </a>
 
         <a
           href="#gemini-market-research"
           style={{
-            padding: "11px 20px",
-            borderRadius: "30px",
+            ...linkStyle,
             background: "#153cbd",
-            color: "#ffffff",
-            textDecoration: "none",
-            fontFamily: "Arial, sans-serif",
-            fontSize: "14px",
+            borderColor: "#153cbd",
+            color: "white",
           }}
         >
           Research my market with Gemini ↗
         </a>
 
-        <a
-          href="/diagnostics"
-          style={{
-            padding: "11px 20px",
-            border: "1px solid #d5d8cc",
-            borderRadius: "30px",
-            color: "#34372f",
-            textDecoration: "none",
-            fontFamily: "Arial, sans-serif",
-            fontSize: "14px",
-          }}
-        >
+        <a href="/diagnostics" style={linkStyle}>
           Demand and retention
         </a>
       </nav>
 
       <div
         id="financial-dashboard"
-        style={{ scrollMarginTop: "100px" }}
+        style={{ scrollMarginTop: "95px" }}
       >
         <Dashboard />
       </div>
@@ -77,9 +62,8 @@ export default function HomePage() {
         id="gemini-market-research"
         aria-label="Gemini market research"
         style={{
-          scrollMarginTop: "100px",
-          paddingTop: "35px",
-          paddingBottom: "50px",
+          scrollMarginTop: "95px",
+          padding: "35px 0 60px",
           borderTop: "1px solid #deded5",
           background: "#f8f7f3",
         }}
